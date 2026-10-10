@@ -7,6 +7,8 @@ struct LifeAdminAIApp: App {
     private let modelContainer: ModelContainer
 
     init() {
+        NotificationManager.configure()
+
         let schema = Schema([LifeDocument.self])
         let configuration = ModelConfiguration(
             schema: schema,

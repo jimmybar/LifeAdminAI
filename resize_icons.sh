@@ -1,0 +1,32 @@
+#!/bin/bash
+SRC="AppIcon1024.png"
+APPICONSET="Life Admin AI/Assets.xcassets/AppIcon.appiconset"
+ROOTDIR="Life Admin AI"
+
+cp "$SRC" "$APPICONSET/AppIcon.png"
+
+sips -z 20 20 "$SRC" --out "$APPICONSET/icon-20-ipad.png"
+sips -z 40 40 "$SRC" --out "$APPICONSET/icon-20@2x.png"
+sips -z 60 60 "$SRC" --out "$APPICONSET/icon-20@3x.png"
+sips -z 29 29 "$SRC" --out "$APPICONSET/icon-29-ipad.png"
+sips -z 58 58 "$SRC" --out "$APPICONSET/icon-29@2x.png"
+sips -z 87 87 "$SRC" --out "$APPICONSET/icon-29@3x.png"
+sips -z 40 40 "$SRC" --out "$APPICONSET/icon-40-ipad.png"
+sips -z 80 80 "$SRC" --out "$APPICONSET/icon-40@2x.png"
+sips -z 120 120 "$SRC" --out "$APPICONSET/icon-40@3x.png"
+sips -z 120 120 "$SRC" --out "$APPICONSET/icon-60@2x.png"
+sips -z 180 180 "$SRC" --out "$APPICONSET/icon-60@3x.png"
+sips -z 76 76 "$SRC" --out "$APPICONSET/icon-76-ipad.png"
+sips -z 152 152 "$SRC" --out "$APPICONSET/icon-76@2x-ipad.png"
+sips -z 167 167 "$SRC" --out "$APPICONSET/icon-83.5@2x-ipad.png"
+
+sips -z 120 120 "$SRC" --out "$ROOTDIR/AppIcon120.png"
+sips -z 152 152 "$SRC" --out "$ROOTDIR/AppIcon152.png"
+sips -z 167 167 "$SRC" --out "$ROOTDIR/AppIcon167.png"
+sips -z 180 180 "$SRC" --out "$ROOTDIR/AppIcon180.png"
+sips -z 120 120 "$SRC" --out "$ROOTDIR/Icon-60@2x.png"
+sips -z 180 180 "$SRC" --out "$ROOTDIR/Icon-60@3x.png"
+sips -z 152 152 "$SRC" --out "$ROOTDIR/Icon-76@2x~ipad.png"
+sips -z 167 167 "$SRC" --out "$ROOTDIR/Icon-83.5@2x~ipad.png"
+
+echo "All app icons successfully resized!"

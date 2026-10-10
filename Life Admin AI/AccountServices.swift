@@ -30,15 +30,21 @@ final class AccountServices {
     private let displayNameKey = "appleDisplayName"
 
     func refresh() async {
-        await refreshAppleSignIn()
-        await refreshICloud()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await self.refreshAppleSignIn()
+            }
+            group.addTask {
+                await self.refreshICloud()
+            }
+        }
     }
 
     func handleSignIn(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-                appleSignInStatus = .error("Apple no devolvió una credencial válida.")
+                appleSignInStatus = .error(LanguageManager.tr("acc.errInvalidCred"))
                 return
             }
 
@@ -53,9 +59,9 @@ final class AccountServices {
                 }
 
                 let displayName = UserDefaults.standard.string(forKey: displayNameKey)
-                appleSignInStatus = .signedIn(name: displayName ?? "Cuenta de Apple")
+                appleSignInStatus = .signedIn(name: displayName ?? LanguageManager.tr("acc.defaultName"))
             } catch {
-                appleSignInStatus = .error("No se pudo guardar la sesión de forma segura.")
+                appleSignInStatus = .error(LanguageManager.tr("acc.errKeychain"))
             }
 
         case .failure(let error):
@@ -74,20 +80,29 @@ final class AccountServices {
     }
 
     func refreshICloud() async {
-        iCloudStatus = .checking
+        if iCloudStatus == .checking {
+            iCloudStatus = .checking
+        }
 
-        let result: (CKAccountStatus, Error?) = await withCheckedContinuation { continuation in
-            CKContainer.default().accountStatus { status, error in
-                continuation.resume(returning: (status, error))
+        let result: (CKAccountStatus, Error?)? = await withTimeout(seconds: 3.0) {
+            await withCheckedContinuation { continuation in
+                CKContainer.default().accountStatus { status, error in
+                    continuation.resume(returning: (status, error))
+                }
             }
         }
 
-        if let error = result.1 {
+        guard let (status, error) = result else {
+            iCloudStatus = .temporarilyUnavailable
+            return
+        }
+
+        if let error {
             iCloudStatus = .error(error.localizedDescription)
             return
         }
 
-        switch result.0 {
+        switch status {
         case .available:
             iCloudStatus = .available
         case .noAccount:
@@ -97,53 +112,84 @@ final class AccountServices {
         case .temporarilyUnavailable:
             iCloudStatus = .temporarilyUnavailable
         case .couldNotDetermine:
-            iCloudStatus = .error("No se pudo verificar la cuenta de iCloud.")
+            iCloudStatus = .error(LanguageManager.tr("acc.errCloudCheck"))
         @unknown default:
-            iCloudStatus = .error("Estado de iCloud desconocido.")
+            iCloudStatus = .error(LanguageManager.tr("acc.errCloudUnknown"))
         }
     }
 
-    private func refreshAppleSignIn() async {
+    func refreshAppleSignIn() async {
         guard let userID = KeychainStore.value(for: userIDKey) else {
             appleSignInStatus = .signedOut
             return
         }
 
-        appleSignInStatus = .checking
-        let state = await withCheckedContinuation { continuation in
-            ASAuthorizationAppleIDProvider().getCredentialState(forUserID: userID) { state, _ in
-                continuation.resume(returning: state)
+        if case .signedIn = appleSignInStatus {
+            // Mantener .signedIn mientras se verifica en segundo plano
+        } else {
+            appleSignInStatus = .checking
+        }
+
+        let state: ASAuthorizationAppleIDProvider.CredentialState? = await withTimeout(seconds: 3.0) {
+            await withCheckedContinuation { continuation in
+                ASAuthorizationAppleIDProvider().getCredentialState(forUserID: userID) { state, _ in
+                    continuation.resume(returning: state)
+                }
             }
+        }
+
+        guard let state else {
+            if case .signedIn = appleSignInStatus {
+                // Si ya estaba iniciada la sesión y no responde la red, conservar la sesión actual
+            } else {
+                appleSignInStatus = .signedOut
+            }
+            return
         }
 
         switch state {
         case .authorized:
             let displayName = UserDefaults.standard.string(forKey: displayNameKey)
-            appleSignInStatus = .signedIn(name: displayName ?? "Cuenta de Apple")
+            appleSignInStatus = .signedIn(name: displayName ?? LanguageManager.tr("acc.defaultName"))
         case .revoked, .notFound, .transferred:
             signOut()
         @unknown default:
-            appleSignInStatus = .signedOut
+            if case .signedIn = appleSignInStatus {
+                // Mantener estado si no hay revocación confirmada
+            } else {
+                appleSignInStatus = .signedOut
+            }
         }
+    }
+}
+
+private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async -> T) async -> T? {
+    await withTaskGroup(of: T?.self) { group in
+        group.addTask {
+            await operation()
+        }
+        group.addTask {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            return nil
+        }
+        let firstResult = await group.next()
+        group.cancelAll()
+        return firstResult ?? nil
     }
 }
 
 private enum KeychainStore {
     static func save(_ value: String, for key: String) throws {
-        delete(key)
-
-        let data = Data(value.utf8)
+        guard let data = value.data(using: .utf8) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrService as String: Bundle.main.bundleIdentifier ?? "LifeAdminAI",
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecValueData as String: data
         ]
-
+        SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        if status != errSecSuccess {
+            throw KeychainError.unhandledError(status: status)
         }
     }
 
@@ -151,25 +197,24 @@ private enum KeychainStore {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrService as String: Bundle.main.bundleIdentifier ?? "LifeAdminAI",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else {
-            return nil
-        }
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     static func delete(_ key: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecAttrService as String: Bundle.main.bundleIdentifier ?? "LifeAdminAI"
+            kSecAttrAccount as String: key
         ]
         SecItemDelete(query as CFDictionary)
+    }
+
+    enum KeychainError: Error {
+        case unhandledError(status: OSStatus)
     }
 }

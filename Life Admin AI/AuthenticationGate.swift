@@ -3,17 +3,20 @@ import SwiftUI
 
 struct AuthenticationGate: View {
     @Environment(AccountServices.self) private var accountServices
+    @State private var languageManager = LanguageManager.shared
 
     var body: some View {
         switch accountServices.appleSignInStatus {
         case .checking:
-            ProgressView("Verificando tu cuenta…")
+            ProgressView(languageManager.tr("gate.checking"))
                 .task {
                     await accountServices.refresh()
                 }
 
         case .signedIn:
-            ContentView()
+            AppLockGate {
+                ContentView()
+            }
 
         case .signedOut:
             AppleLoginView()
@@ -26,6 +29,7 @@ struct AuthenticationGate: View {
 
 private struct AppleLoginView: View {
     @Environment(AccountServices.self) private var accountServices
+    @State private var languageManager = LanguageManager.shared
     var errorMessage: String?
 
     var body: some View {
@@ -42,7 +46,7 @@ private struct AppleLoginView: View {
                 Text("Life Admin AI")
                     .font(.largeTitle.bold())
 
-                Text("Organiza y protege tus documentos importantes.")
+                Text(languageManager.tr("gate.sub"))
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -62,9 +66,9 @@ private struct AppleLoginView: View {
             }
             .signInWithAppleButtonStyle(.black)
             .frame(height: 52)
-            .accessibilityLabel("Iniciar sesión con Apple")
+            .accessibilityLabel(languageManager.tr("gate.appleBtnLabel"))
 
-            Text("Tu identificador de sesión se guarda de forma segura en el Keychain. La sincronización usa por separado la cuenta de iCloud del dispositivo.")
+            Text(languageManager.tr("gate.footer"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -9,7 +9,9 @@ struct ExtractedDocument: Sendable {
     let issuer: String
     let ownerName: String
     let identifier: String
+    let amount: Double?
     let expirationDate: Date?
+    let recurrenceFrequency: RecurrenceFrequency
     let notes: String
 }
 
@@ -21,11 +23,11 @@ enum DocumentIntelligenceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noTextRecognized:
-            "No se pudo reconocer texto en el documento."
+            LanguageManager.tr("err.noText")
         case .appleIntelligenceUnavailable(let reason):
             reason
         case .invalidImage:
-            "No se pudo procesar una de las páginas capturadas."
+            LanguageManager.tr("err.invalidImage")
         }
     }
 }
@@ -133,7 +135,9 @@ enum DocumentIntelligenceService {
             issuer: content.issuer,
             ownerName: content.ownerName,
             identifier: content.identifier,
+            amount: nil,
             expirationDate: parseDate(content.expirationDate),
+            recurrenceFrequency: .never,
             notes: content.notes
         )
     }

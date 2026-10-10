@@ -1,0 +1,24 @@
+# Xcode
+## User settings
+xcuserdata/
+
+## Build generated
+build/
+DerivedData/
+*.moved-aside
+*.xcuserstate
+
+## Product artifacts
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcarchive
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# App distribution logs
+*.xcdistributionlogs
